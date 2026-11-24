@@ -1,0 +1,8 @@
+# Third-party packages imported by the code in this release.
+# DINOv3 is loaded via torch.hub from a local clone of facebookresearch/dinov3
+# (pass --dinov3-repo); it is not a pip dependency.
+numpy
+opencv-python
+torch
+ultralytics
+scenedetect>=0.6   # scenedetect.detect / ContentDetector API

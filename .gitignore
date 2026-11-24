@@ -1,0 +1,31 @@
+# Media (NBA broadcast footage is copyrighted; never commit)
+*.mp4
+*.avi
+*.mov
+*.mkv
+frames/
+clips/
+videos/
+
+# Model weights / checkpoints
+weights/
+*.pt
+*.pth
+*.ckpt
+dinov3/
+
+# Data, outputs, logs
+raw/
+processed/
+annotations*/
+outputs/
+qa_report/
+logs/
+*.log
+batch_log*.csv
+
+# Python / env
+__pycache__/
+*.py[cod]
+.env
+.venv/

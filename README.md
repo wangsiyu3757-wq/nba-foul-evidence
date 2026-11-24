@@ -6,7 +6,7 @@
 ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)
 ![YOLO](https://img.shields.io/badge/YOLO-detection-00FFFF?style=flat-square)
 ![DINOv3](https://img.shields.io/badge/DINOv3-ReID-555?style=flat-square)
-![HPC](https://img.shields.io/badge/Slurm-HPC-555?style=flat-square)
+![HPC](https://img.shields.io/badge/UTS-HPC-555?style=flat-square)
 
 Siyu Wang · Master of Research, University of Technology Sydney
 
@@ -52,7 +52,7 @@ Running **BoT-SORT** on broadcast basketball, most frames kept only **1–2 trac
 - **Result:** **1–2 → 40–55 tracks per frame**, consistent with independent detection counts; also validated on a synthetic 9-person dense-occlusion stress test.
 
 ### 2. Court-based, not jersey-based, player filtering
-Spectators wear jerseys too — often facing the camera, closer and more legible than players. So instead of reading numbers, the pipeline keeps tracks **inside the calibrated court boundary** and caps them at **10 per frame**.
+Spectators wear jerseys too — often facing the camera, closer and more legible than players. So instead of reading numbers, the pipeline keeps tracks **inside the calibrated court boundary** and caps the result at **15 people per frame** (10 players plus referees, with margin). Two modes: fixed sideline lines, or a **colour-adaptive** floor model (HSV, Mahalanobis distance) that stays correct when the camera zooms or pans.
 
 ### 3. Official rulings as ground truth
 `637` cleaned L2M ruling records across `26` games, aligned to `634` processed clips. The league's rulings are used as authoritative labels; the open problem is extracting the *evidence*.
@@ -67,7 +67,7 @@ threshold = CONTACT_RATIO × mean(bbox long side of both players),   CONTACT_RAT
 Frames are merged into events with a 3-frame gap tolerance. Output is a **candidate pool for human review**, ranked and exported as snapshots — not auto-labels, since legal contact (screens, box-outs) also triggers it.
 
 ### 5. Production-minded batch processing
-Resumable runs, per-clip timeouts, CSV status logs, and atomic writes (temp file → replace) to survive NFS timing issues on the shared HPC filesystem.
+Resumable runs (each step skipped if its output exists), per-clip timeouts that kill stuck jobs and move on, CSV status logs, and atomic writes (temp file → replace) for tracking outputs on the shared HPC filesystem.
 
 ---
 
@@ -88,21 +88,41 @@ Resumable runs, per-clip timeouts, CSV status logs, and atomic writes (temp file
 
 ## Code
 
-`TODO: code will be added here.`
-
 ```text
 nba-foul-evidence/
+├── batch_process.py                     # resumable batch runner: tracking → court filter, per-clip timeout, CSV log
 ├── tracking/
-│   ├── run_inference_decoupled.py   # detection + greedy IoU tracker + DINOv3 ReID
-│   └── filter_on_court_players.py   # court-boundary filter + 10-player cap
+│   ├── run_inference_decoupled.py       # YOLOv8 detection + IoU tracker + DINOv3 ReID + per-crop pose, scene-cut resets
+│   └── filter_on_court_players.py       # sideline calibration (fixed or colour-adaptive) + per-frame cap
 ├── data/
-│   ├── clean_l2m_labels.py          # L2M exports → processed/l2m_clean.jsonl
-│   └── check_l2m_alignment.py       # match rulings to tracked clips
+│   ├── clean_l2m_labels.py              # raw L2M JSON → processed/l2m_clean.jsonl
+│   └── check_l2m_alignment.py           # match L2M rulings to tracked clips, report match rate
 ├── evidence/
-│   └── extract_hand_check_labels.py # scale-adaptive contact events
-├── batch_process.py                 # resumable, timeout-protected orchestration
-└── slurm/                           # HPC job scripts
+│   ├── extract_hand_check_labels.py     # scale-adaptive wrist-to-body contact events
+│   └── export_event_snapshots.py        # top-k events → annotated closest-contact frame (JPG) for review
+└── requirements.txt
 ```
-<!-- TODO: adjust to match the real code. Do not upload NBA broadcast footage; share scripts and, if allowed, derived annotations only. -->
 
-**Tech:** Python · YOLO · BoT-SORT · DINOv3 · pose estimation · PySceneDetect · Slurm HPC · JSONL data pipelines
+Videos, L2M downloads and model weights are not included. NBA broadcast footage is copyrighted; obtain clips and L2M reports from official sources.
+
+### Quick start
+
+```bash
+pip install -r requirements.txt
+
+# 1. Track and filter every clip (resumable)
+python batch_process.py --video-dir videos/ --annotations-dir annotations/ \
+    --sideline-points-dir sideline_points/ --log batch_log.csv
+
+# 2. Clean L2M reports and check alignment with the tracked clips
+python data/clean_l2m_labels.py --input_dir raw/l2m_json --output_jsonl processed/l2m_clean.jsonl
+python data/check_l2m_alignment.py --l2m_jsonl processed/l2m_clean.jsonl --annotations_dir annotations/
+
+# 3. Extract candidate contact events and export snapshots for review
+python evidence/extract_hand_check_labels.py --annotations-dir annotations/ \
+    --output-dir processed/hand_check_labels/ --summary-csv processed/hand_check_summary.csv
+python evidence/export_event_snapshots.py --video-dir videos/ --annotations-dir annotations/ \
+    --events-dir processed/hand_check_labels/ --output-dir qa_report/hand_check_snapshots/ --top-k 8
+```
+
+**Tech:** Python · YOLOv8 · DINOv3 · pose estimation · PySceneDetect · OpenCV · HPC · JSONL data pipelines
